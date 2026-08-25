@@ -494,16 +494,27 @@ export function parseNaturalLanguage(text: string, date = localDateKey()): Parse
 
   const parts = normalized.split(",").map((part) => part.trim()).filter(Boolean);
   const actions: ParsedAction[] = [];
+  let contextualDate = date;
+  let pendingPrefixDetail: string | undefined = undefined;
 
   for (const part of parts) {
     const { entry: datedEntry, detail: explicitDetail } = splitExplicitDetail(part);
-    const { entry, date: entryDate } = resolveEntryDate(datedEntry, date);
+    const { entry, date: entryDate } = resolveEntryDate(datedEntry, contextualDate);
     const amount = accountingAmount(entry);
     if (!amount) {
+      if (entryDate !== contextualDate) {
+        contextualDate = entryDate;
+      }
       const followingDetail = combineNotes(entry, explicitDetail);
-      if (followingDetail) appendDetailToPreviousTransaction(actions, followingDetail);
+      if (actions.length > 0) {
+        if (followingDetail) appendDetailToPreviousTransaction(actions, followingDetail);
+      } else if (followingDetail) {
+        pendingPrefixDetail = combineNotes(pendingPrefixDetail, followingDetail);
+      }
       continue;
     }
+
+    const effectiveDate = entryDate !== date ? entryDate : contextualDate;
 
     const loanMatch = entry.match(
       /(?:借给|借了给)\s*([^\d零一二两俩三四五六七八九十百千万¥￥元块角毛分\s]{1,6})|([^\d零一二两俩三四五六七八九十百千万¥￥元块角毛分\s]{1,6})\s*(?:向我借|借给我)|(?:我向|向)\s*([^\d零一二两俩三四五六七八九十百千万¥￥元块角毛分\s]{1,6})\s*借/
@@ -513,7 +524,7 @@ export function parseNaturalLanguage(text: string, date = localDateKey()): Parse
       const person = rawPerson.replace(/^(?:昨天|前天|今天|昨晚|刚才)/, "").trim() || "未命名";
       const isLent = /(?:向我借|借给(?!我)|借出)/.test(entry);
       const isBorrow = !isLent && /(?:我向|借给我|我借了|借入)/.test(entry);
-      actions.push({ type: "loan", value: { person, direction: isBorrow ? "borrowed" : "lent", amount, repaid: 0, date: entryDate, settled: false } });
+      actions.push({ type: "loan", value: { person, direction: isBorrow ? "borrowed" : "lent", amount, repaid: 0, date: effectiveDate, settled: false } });
       continue;
     }
 
@@ -525,13 +536,14 @@ export function parseNaturalLanguage(text: string, date = localDateKey()): Parse
 
     const { account } = extractAccount(entry);
     const result = classify(entry);
-    const note = combineNotes(extractMainDetail(entry, result.title), explicitDetail);
+    const note = combineNotes(pendingPrefixDetail, extractMainDetail(entry, result.title), explicitDetail);
+    pendingPrefixDetail = undefined;
     actions.push({
       type: "transaction",
       value: {
         ...result,
         amount,
-        date: entryDate,
+        date: effectiveDate,
         ...(account ? { account } : {}),
         channel: "AI 语音记账",
         ...(note ? { note } : {}),

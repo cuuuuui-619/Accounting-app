@@ -18,6 +18,17 @@ test("parses zero-five fractional expressions and dot decimal points correctly",
   assert.equal(chineseNumberToValue("十点零八元"), 10.08);
 });
 
+test("preserves leading no-amount date clause for subsequent transactions", () => {
+  const base = "2026-08-25";
+  const actions = parseNaturalLanguage("昨天买的，咖啡28元", base);
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0]?.type, "transaction");
+  if (actions[0]?.type === "transaction") {
+    assert.equal(actions[0].value.date, "2026-08-24");
+    assert.equal(actions[0].value.amount, 28);
+  }
+});
+
 test("parses multiple voice bookkeeping actions", () => {
   const actions = parseNaturalLanguage("午饭38元，然后老王向我借了五百，这个月工资到账六千元", "2026-08-23");
   assert.equal(actions.length, 3);
