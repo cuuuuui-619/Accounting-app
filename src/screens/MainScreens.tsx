@@ -3,7 +3,7 @@ import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, St
 import { CalendarDays, ChevronLeft, ChevronRight, Save, Search, Sparkles, SquarePen, Trash2, Undo2 } from "lucide-react-native";
 
 import { Card, Chip, EmptyState, Field, MoneySummary, PrimaryButton, ProgressBar, SecondaryButton, SectionTitle, TransactionIcon } from "../components";
-import { categorySpend, formatMoney, monthTransactions, parseNaturalLanguage, periodTransactions, totals } from "../domain";
+import { categorySpend, formatMoney, isValidDate, monthTransactions, parseNaturalLanguage, periodTransactions, totals } from "../domain";
 import { useLedger } from "../store";
 import { colors, common } from "../theme";
 import type { ParsedAction, Transaction, TransactionAccount, TransactionKind } from "../types";
@@ -26,13 +26,6 @@ function localDateValue(date = new Date()) {
 function shiftMonth(value: string, offset: number) {
   const [year = 2026, month = 1] = value.split("-").map(Number);
   return formatMonth(new Date(year, month - 1 + offset, 1));
-}
-
-function isValidDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const parsed = new Date(year ?? 0, (month ?? 1) - 1, day ?? 0);
-  return parsed.getFullYear() === year && parsed.getMonth() === (month ?? 1) - 1 && parsed.getDate() === day;
 }
 
 function Calendar({ month, activeDays, selectedDay, onShift, onSelectDay }: { month: string; activeDays: Set<number>; selectedDay: number | null; onShift: (offset: number) => void; onSelectDay: (day: number | null) => void }) {
@@ -81,7 +74,7 @@ export function DetailsScreen() {
   const [editNote, setEditNote] = useState("");
   const monthly = useMemo(() => monthTransactions(state.transactions, month), [state.transactions, month]);
   const filtered = useMemo(() => monthly.filter((item) => (kind === "all" || item.kind === kind) && (selectedDay === null || Number(item.date.slice(8, 10)) === selectedDay) && `${item.title}${item.category}${item.note ?? ""}`.includes(query.trim())), [monthly, kind, query, selectedDay]);
-  const summary = totals(monthly);
+  const summary = useMemo(() => totals(monthly), [monthly]);
   const activeDays = useMemo(() => new Set(monthly.map((item) => Number(item.date.slice(8, 10)))), [monthly]);
   const editAmountValue = Number(editAmount.replace(",", "."));
   const canSaveEdit = Boolean(editingTransaction && editAmountValue > 0 && editTitle.trim() && editCategory.trim() && isValidDate(editDate));
@@ -182,14 +175,25 @@ export function DetailsScreen() {
 export function OverviewScreen() {
   const { state } = useLedger();
   const [period, setPeriod] = useState<"month" | "term" | "year">("month");
-  const month = formatMonth(new Date());
-  const current = periodTransactions(state.transactions, period);
-  const summary = totals(current);
+  const month = useMemo(() => formatMonth(new Date()), []);
+  const current = useMemo(() => periodTransactions(state.transactions, period), [state.transactions, period]);
+  const summary = useMemo(() => totals(current), [current]);
   const budgetMultiplier = period === "month" ? 1 : period === "term" ? 6 : 12;
-  const budgetTotal = state.budgets.reduce((sum, item) => sum + item.amount, 0) * budgetMultiplier;
-  const ratio = budgetTotal ? summary.expense / budgetTotal * 100 : 0;
-  const categoryData = state.budgets.map((budget) => ({ ...budget, spent: categorySpend(current, budget.category) }));
-  const max = Math.max(1, ...categoryData.map((item) => item.spent));
+  const budgetTotal = useMemo(() => state.budgets.reduce((sum, item) => sum + item.amount, 0) * budgetMultiplier, [state.budgets, budgetMultiplier]);
+  const ratio = budgetTotal ? (summary.expense / budgetTotal) * 100 : 0;
+  const categoryData = useMemo(() => {
+    const spendByCategory = new Map<string, number>();
+    for (const item of current) {
+      if (item.kind === "expense") {
+        spendByCategory.set(item.category, (spendByCategory.get(item.category) ?? 0) + item.amount);
+      }
+    }
+    return state.budgets.map((budget) => ({
+      ...budget,
+      spent: Math.round((spendByCategory.get(budget.category) ?? 0) * 100) / 100,
+    }));
+  }, [state.budgets, current]);
+  const max = useMemo(() => Math.max(1, ...categoryData.map((item) => item.spent)), [categoryData]);
 
   return (
     <ScrollView contentContainerStyle={common.content}>

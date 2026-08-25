@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, ChevronRight, CircleHelp, Cloud, CloudOff, Copy, Eye, EyeOff, FolderKanban, HandCoins, KeyRound, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Trash2, Undo2, WalletCards } from "lucide-react-native";
 
@@ -52,8 +52,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (route: ProfileRoute
   const copySyncCode = async () => {
     if (!syncCode) return;
     try {
-      await navigator.clipboard.writeText(syncCode);
-      setFeedback("同步码已复制。");
+      if (typeof navigator !== "undefined" && navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(syncCode);
+        setFeedback("同步码已复制。");
+      } else {
+        setShowCode(true);
+        setFeedback("请长按同步码进行复制。");
+      }
     } catch {
       setShowCode(true);
       setFeedback("请长按同步码进行复制。");
@@ -188,24 +193,80 @@ function Metric({ label, value }: { label: string; value: string }) {
 export function LoansScreen() {
   const { state, addLoan, toggleLoan } = useLedger();
   const [showForm, setShowForm] = useState(false);
+  const [direction, setDirection] = useState<"lent" | "borrowed">("lent");
   const [person, setPerson] = useState("");
   const [amount, setAmount] = useState("");
   const totalsByDirection = useMemo(() => ({ lent: state.loans.filter((item) => item.direction === "lent" && !item.settled).reduce((sum, item) => sum + item.amount - item.repaid, 0), borrowed: state.loans.filter((item) => item.direction === "borrowed" && !item.settled).reduce((sum, item) => sum + item.amount - item.repaid, 0) }), [state.loans]);
   const add = () => {
     if (!person.trim() || Number(amount) <= 0) return;
-    addLoan({ person: person.trim(), direction: "lent", amount: Number(amount), repaid: 0, date: new Date().toISOString().slice(0, 10), settled: false });
+    addLoan({ person: person.trim(), direction, amount: Number(amount), repaid: 0, date: new Date().toISOString().slice(0, 10), settled: false });
     setPerson(""); setAmount(""); setShowForm(false);
   };
   return (
     <ScrollView contentContainerStyle={common.content}>
       <Card><Text style={common.h2}>借贷垫付</Text><Text style={[common.muted, { marginTop: 4 }]}>记录欠款与还款，结清状态一眼可见。</Text><View style={{ marginTop: 14 }}><PrimaryButton label="添加记录" onPress={() => setShowForm((value) => !value)} /></View></Card>
       <View style={styles.loanSummary}><Metric label="我借出去未收回" value={formatMoney(totalsByDirection.lent)} /><Metric label="我欠人未还" value={formatMoney(totalsByDirection.borrowed)} /></View>
-      {showForm ? <Card style={styles.topGap}><View style={styles.formGap}><Field label="对方" value={person} onChangeText={setPerson} placeholder="姓名或称呼" /><Field label="金额" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" /><PrimaryButton label="保存借出记录" onPress={add} /></View></Card> : null}
+      {showForm ? (
+        <Card style={styles.topGap}>
+          <View style={styles.formGap}>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable style={[styles.flex, { paddingVertical: 10, borderRadius: 8, alignItems: "center", backgroundColor: direction === "lent" ? colors.primary : colors.surfaceMuted }]} onPress={() => setDirection("lent")}>
+                <Text style={{ color: direction === "lent" ? colors.white : colors.ink, fontWeight: "700" }}>我借出 (应收款)</Text>
+              </Pressable>
+              <Pressable style={[styles.flex, { paddingVertical: 10, borderRadius: 8, alignItems: "center", backgroundColor: direction === "borrowed" ? colors.primary : colors.surfaceMuted }]} onPress={() => setDirection("borrowed")}>
+                <Text style={{ color: direction === "borrowed" ? colors.white : colors.ink, fontWeight: "700" }}>我借入 (应还款)</Text>
+              </Pressable>
+            </View>
+            <Field label="对方" value={person} onChangeText={setPerson} placeholder="姓名或称呼" />
+            <Field label="金额" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" />
+            <PrimaryButton label={`保存${direction === "lent" ? "借出" : "借入"}记录`} onPress={add} />
+          </View>
+        </Card>
+      ) : null}
       <View style={styles.filterRow}><Text style={styles.filterActive}>全部</Text><Text style={styles.filter}>未结清</Text><Text style={styles.filter}>已结清</Text></View>
       {state.loans.map((loan) => <Card key={loan.id} style={styles.loanCard}><View style={styles.flex}><Text style={common.h3}>{loan.direction === "lent" ? "借给" : "借自"} {loan.person}</Text><Text style={common.muted}>{loan.date} · {loan.settled ? "已结清" : "未结清"}</Text></View><Text style={styles.loanAmount}>{formatMoney(loan.amount - loan.repaid)}</Text><SecondaryButton label={loan.settled ? "恢复" : "结清"} onPress={() => toggleLoan(loan.id)} /></Card>)}
     </ScrollView>
   );
 }
+
+const BudgetItemRow = React.memo(function BudgetItemRow({
+  category,
+  initialAmount,
+  onAmountChange,
+}: {
+  category: string;
+  initialAmount: number;
+  onAmountChange: (category: string, value: string) => void;
+}) {
+  const [val, setVal] = useState(String(initialAmount));
+
+  useEffect(() => {
+    setVal(String(initialAmount));
+  }, [initialAmount]);
+
+  return (
+    <Card style={styles.budgetRow}>
+      <View style={styles.flex}>
+        <Text style={common.h3}>{category}</Text>
+        <Text style={common.muted}>月度配额</Text>
+      </View>
+      <View style={styles.budgetInput}>
+        <Text style={styles.currency}>¥</Text>
+        <View style={styles.budgetField}>
+          <Field
+            label=""
+            value={val}
+            onChangeText={(value) => {
+              setVal(value);
+              onAmountChange(category, value);
+            }}
+            keyboardType="decimal-pad"
+          />
+        </View>
+      </View>
+    </Card>
+  );
+});
 
 export function BudgetsScreen() {
   const { state, setBudgets } = useLedger();
@@ -216,14 +277,36 @@ export function BudgetsScreen() {
     setDraft(state.budgets);
   }, [state.budgets]);
 
-  const total = draft.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const update = (category: string, value: string) => setDraft((items) => items.map((item) => item.category === category ? { ...item, amount: Number(value) || 0 } : item));
+  const total = useMemo(() => draft.reduce((sum, item) => sum + Number(item.amount || 0), 0), [draft]);
+  const update = useCallback((category: string, value: string) => {
+    setSaved(false);
+    setDraft((items) => items.map((item) => item.category === category ? { ...item, amount: Number(value) || 0 } : item));
+  }, []);
+
   return (
     <ScrollView contentContainerStyle={common.content} keyboardShouldPersistTaps="handled">
-      <Card><View style={styles.budgetHero}><SlidersHorizontal size={22} color={colors.primary} /><View style={styles.flex}><Text style={common.h2}>各分类月度预算配置</Text><Text style={common.muted}>超过分类预算时会在概览中醒目提示。</Text></View></View><Text style={[common.muted, { marginTop: 14 }]}>月度预算上限合计</Text><Text style={styles.budgetTotal}>{formatMoney(total)}</Text><PrimaryButton label="保存配置" onPress={() => { setBudgets(draft); setSaved(true); }} /></Card>
+      <Card>
+        <View style={styles.budgetHero}>
+          <SlidersHorizontal size={22} color={colors.primary} />
+          <View style={styles.flex}>
+            <Text style={common.h2}>各分类月度预算配置</Text>
+            <Text style={common.muted}>超过分类预算时会在概览中醒目提示。</Text>
+          </View>
+        </View>
+        <Text style={[common.muted, { marginTop: 14 }]}>月度预算上限合计</Text>
+        <Text style={styles.budgetTotal}>{formatMoney(total)}</Text>
+        <PrimaryButton label="保存配置" onPress={() => { setBudgets(draft); setSaved(true); }} />
+      </Card>
       {saved ? <View style={styles.savedBadge}><Text style={styles.savedText}>配置已保存</Text></View> : null}
       <SectionTitle>分类上限</SectionTitle>
-      {draft.map((item) => <Card key={item.category} style={styles.budgetRow}><View style={styles.flex}><Text style={common.h3}>{item.category}</Text><Text style={common.muted}>月度配额</Text></View><View style={styles.budgetInput}><Text style={styles.currency}>¥</Text><View style={styles.budgetField}><Field label="" value={String(item.amount)} onChangeText={(value) => { setSaved(false); update(item.category, value); }} keyboardType="decimal-pad" /></View></View></Card>)}
+      {draft.map((item) => (
+        <BudgetItemRow
+          key={item.category}
+          category={item.category}
+          initialAmount={item.amount}
+          onAmountChange={update}
+        />
+      ))}
     </ScrollView>
   );
 }

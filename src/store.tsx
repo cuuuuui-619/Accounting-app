@@ -229,7 +229,12 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       }
     }).catch(() => setReady(true));
 
-    const handleOnline = () => { void flushQueue(); };
+    const handleOnline = () => {
+      void flushQueue();
+      if (configRef.current) {
+        void startSubscription(configRef.current.ledgerId);
+      }
+    };
     if (typeof globalThis.addEventListener === "function") globalThis.addEventListener("online", handleOnline);
     return () => {
       active = false;

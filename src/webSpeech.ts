@@ -47,6 +47,7 @@ export function startWebSpeechRecognition(scope: WebSpeechScope, callbacks: WebS
   recognition.onend = callbacks.onEnd;
   recognition.onerror = (event) => callbacks.onError(event.message || event.error || "语音识别暂不可用");
   recognition.onresult = (event) => {
+    if (!event || !event.results || event.results.length === 0) return;
     const index = Math.max(0, event.resultIndex ?? event.results.length - 1);
     const transcript = event.results[index]?.[0]?.transcript?.trim();
     if (transcript) callbacks.onResult(transcript);

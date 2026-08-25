@@ -29,6 +29,18 @@ test("preserves leading no-amount date clause for subsequent transactions", () =
   }
 });
 
+test("calculates totals without floating point precision issues or negative zero", () => {
+  const txs = [
+    { id: "1", amount: 10.1, kind: "income" as const, category: "收入", title: "收入", date: "2026-08-25", channel: "测试", createdAt: "2026-08-25" },
+    { id: "2", amount: 10.1, kind: "expense" as const, category: "支出", title: "支出", date: "2026-08-25", channel: "测试", createdAt: "2026-08-25" },
+  ];
+  const summary = totals(txs);
+  assert.equal(summary.income, 10.1);
+  assert.equal(summary.expense, 10.1);
+  assert.equal(summary.balance, 0);
+  assert.equal(Object.is(summary.balance, -0), false);
+});
+
 test("parses multiple voice bookkeeping actions", () => {
   const actions = parseNaturalLanguage("午饭38元，然后老王向我借了五百，这个月工资到账六千元", "2026-08-23");
   assert.equal(actions.length, 3);

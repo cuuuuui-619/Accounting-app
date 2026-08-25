@@ -328,7 +328,13 @@ function datePartsFromKey(date: string): DateParts | undefined {
   return isValidDate(parts) ? parts : undefined;
 }
 
-function isValidDate({ year, month, day }: DateParts): boolean {
+export function isValidDate(value: DateParts | string): boolean {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return false;
+    return isValidDate({ year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) });
+  }
+  const { year, month, day } = value;
   if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1) return false;
   return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
@@ -589,13 +595,14 @@ export function restoreTransaction(state: LedgerState, transaction: Transaction)
 }
 
 export function totals(transactions: Transaction[]) {
-  const income = transactions.filter((item) => item.kind === "income").reduce((sum, item) => sum + item.amount, 0);
-  const expense = transactions.filter((item) => item.kind === "expense").reduce((sum, item) => sum + item.amount, 0);
-  return { income, expense, balance: income - expense };
+  const income = Math.round(transactions.filter((item) => item.kind === "income").reduce((sum, item) => sum + item.amount, 0) * 100) / 100;
+  const expense = Math.round(transactions.filter((item) => item.kind === "expense").reduce((sum, item) => sum + item.amount, 0) * 100) / 100;
+  const balance = Math.round((income - expense) * 100) / 100;
+  return { income, expense, balance: Object.is(balance, -0) ? 0 : balance };
 }
 
 export function categorySpend(transactions: Transaction[], category: string): number {
-  return transactions.filter((item) => item.kind === "expense" && item.category === category).reduce((sum, item) => sum + item.amount, 0);
+  return Math.round(transactions.filter((item) => item.kind === "expense" && item.category === category).reduce((sum, item) => sum + item.amount, 0) * 100) / 100;
 }
 
 export function applyParsedActions(state: LedgerState, actions: ParsedAction[]): LedgerState {
@@ -615,5 +622,6 @@ export function applyParsedActions(state: LedgerState, actions: ParsedAction[]):
 }
 
 export function formatMoney(value: number): string {
-  return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const normalized = Object.is(value, -0) || Math.abs(value) < 0.000001 ? 0 : value;
+  return `¥${normalized.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
