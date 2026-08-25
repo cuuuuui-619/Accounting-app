@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "moss-ledger-pwa";
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const SHELL_CACHE_NAME = `${CACHE_PREFIX}-shell-${CACHE_VERSION}`;
 const ASSET_CACHE_NAME = `${CACHE_PREFIX}-assets-${CACHE_VERSION}`;
 const CURRENT_CACHES = new Set([SHELL_CACHE_NAME, ASSET_CACHE_NAME]);
