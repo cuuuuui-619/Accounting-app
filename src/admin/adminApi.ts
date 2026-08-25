@@ -1,3 +1,5 @@
+import { ADMIN_DELETE_CONFIRMATION, type AdminDeleteResource } from "../../supabase/functions/moss-admin/contract";
+
 export type AdminResource = "users" | "ledgers" | "records";
 
 export type AdminStats = {
@@ -85,6 +87,5 @@ export function requestAdminPage(password: string, resource: AdminResource, page
 export function deleteAdminResource(password: string, resource: AdminDeleteResource, targetId: string, confirmation: string): Promise<AdminDeleteResponse> {
   return requestAdmin<AdminDeleteResponse>(password, { action: "delete", resource, targetId, confirmation });
 }
-import { ADMIN_DELETE_CONFIRMATION, type AdminDeleteResource } from "../../supabase/functions/moss-admin/contract";
 
 export { ADMIN_DELETE_CONFIRMATION, type AdminDeleteResource };

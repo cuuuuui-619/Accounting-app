@@ -203,7 +203,7 @@ export function OverviewScreen() {
         <Text style={[common.muted, { marginTop: 4 }]}>收入、支出、预算与结余集中在一个页面。</Text>
       </Card>
       <Card style={styles.blockGap}>
-        <SectionTitle><>{period === "month" ? "月度" : period === "term" ? "学期" : "年度"}总预算消耗进度</></SectionTitle>
+        <SectionTitle>{period === "month" ? "月度" : period === "term" ? "学期" : "年度"}总预算消耗进度</SectionTitle>
         <Text style={styles.heroMoney}>{formatMoney(summary.expense)} <Text style={common.muted}>/ {formatMoney(budgetTotal)}</Text></Text>
         <ProgressBar value={ratio} tone={ratio > 90 ? "expense" : ratio > 70 ? "amber" : "primary"} />
         <View style={styles.between}><Text style={common.muted}>已使用 {Math.round(ratio)}%</Text><Text style={common.muted}>剩余 {formatMoney(Math.max(0, budgetTotal - summary.expense))}</Text></View>
