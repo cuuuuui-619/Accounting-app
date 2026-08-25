@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { CalendarDays, ChevronLeft, ChevronRight, Save, Search, Sparkles, SquarePen, Trash2, Undo2 } from "lucide-react-native";
+import { Bot, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Mic, RotateCcw, Save, Search, Sparkles, SquarePen, Trash2, Undo2, Volume2, VolumeX, Zap } from "lucide-react-native";
 
 import { Badge, Card, Chip, EmptyState, Field, MoneySummary, PrimaryButton, ProgressBar, SecondaryButton, SectionTitle, TransactionIcon } from "../components";
 import { categorySpend, formatMoney, getOverallBudget, isValidDate, monthTransactions, parseNaturalLanguage, periodTransactions, totals } from "../domain";
+import { generateVoiceReply, isSpeechSynthesisSupported, speakChinese, stopSpeaking } from "../speechSynth";
 import { useLedger } from "../store";
-import { colors, common } from "../theme";
+import { colors, common, shadows } from "../theme";
 import type { ParsedAction, Transaction, TransactionAccount, TransactionKind } from "../types";
 
 const transactionCategories: Record<TransactionKind, string[]> = {
@@ -314,28 +315,252 @@ function actionLabel(action: ParsedAction) {
   return `预算 · ${action.value.category} · ${formatMoney(action.value.amount)}`;
 }
 
-export function AssistantScreen({ draft, setDraft, listening, onListen, speechMessage }: { draft: string; setDraft: (value: string) => void; listening: boolean; onListen: () => void; speechMessage?: string }) {
-  const { applyActions, syncCode } = useLedger();
-  const [saved, setSaved] = useState(false);
+export function AssistantScreen({
+  draft,
+  setDraft,
+  listening,
+  onListen,
+  speechMessage,
+}: {
+  draft: string;
+  setDraft: (value: string) => void;
+  listening: boolean;
+  onListen: () => void;
+  speechMessage?: string;
+}) {
+  const { state, applyActions, deleteTransaction, deleteLoan, syncCode } = useLedger();
+  const [autoCommit, setAutoCommit] = useState(true);
+  const [voiceReply, setVoiceReply] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const [aiReply, setAiReply] = useState<string | null>(null);
+  const [savedActions, setSavedActions] = useState<ParsedAction[] | null>(null);
+  const prevListeningRef = useRef(listening);
+
   const actions = useMemo(() => parseNaturalLanguage(draft), [draft]);
-  const apply = () => { applyActions(actions); setSaved(true); setDraft(""); };
+
+  const processAndRespond = (targetActions: ParsedAction[], shouldAutoSave: boolean) => {
+    if (targetActions.length === 0) {
+      const reply = generateVoiceReply([], false);
+      setAiReply(reply);
+      if (voiceReply) {
+        setSpeaking(true);
+        speakChinese(reply, () => setSpeaking(false));
+      }
+      return;
+    }
+
+    if (shouldAutoSave) {
+      applyActions(targetActions);
+      setSavedActions(targetActions);
+      const reply = generateVoiceReply(targetActions, true);
+      setAiReply(reply);
+      if (voiceReply) {
+        setSpeaking(true);
+        speakChinese(reply, () => setSpeaking(false));
+      }
+    } else {
+      const reply = generateVoiceReply(targetActions, false);
+      setAiReply(reply);
+      if (voiceReply) {
+        setSpeaking(true);
+        speakChinese(reply, () => setSpeaking(false));
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (prevListeningRef.current && !listening && draft.trim()) {
+      const currentActions = parseNaturalLanguage(draft.trim());
+      processAndRespond(currentActions, autoCommit);
+    }
+    prevListeningRef.current = listening;
+  }, [listening, draft, autoCommit, voiceReply]);
+
+  const handleManualProcess = () => {
+    if (!draft.trim()) return;
+    const currentActions = parseNaturalLanguage(draft.trim());
+    processAndRespond(currentActions, autoCommit);
+  };
+
+  const handleManualApply = () => {
+    if (actions.length > 0) {
+      applyActions(actions);
+      setSavedActions(actions);
+      const reply = generateVoiceReply(actions, true);
+      setAiReply(reply);
+      if (voiceReply) {
+        setSpeaking(true);
+        speakChinese(reply, () => setSpeaking(false));
+      }
+    }
+  };
+
+  const toggleSpeech = () => {
+    if (speaking) {
+      stopSpeaking();
+      setSpeaking(false);
+    } else if (aiReply) {
+      setSpeaking(true);
+      speakChinese(aiReply, () => setSpeaking(false));
+    }
+  };
+
+  const undoLastCommit = () => {
+    if (!savedActions) return;
+    for (const act of savedActions) {
+      if (act.type === "transaction") {
+        const found = state.transactions.find((t) => t.title === act.value.title && t.amount === act.value.amount);
+        if (found) deleteTransaction(found.id);
+      } else if (act.type === "loan") {
+        const found = state.loans.find((l) => l.person === act.value.person && l.amount === act.value.amount);
+        if (found) deleteLoan(found.id);
+      }
+    }
+    setSavedActions(null);
+    const undoReply = "已为您撤销刚才记入的账目。";
+    setAiReply(undoReply);
+    if (voiceReply) {
+      setSpeaking(true);
+      speakChinese(undoReply, () => setSpeaking(false));
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={common.content} keyboardShouldPersistTaps="handled">
+      {/* 顶部控制模式 */}
+      <View style={styles.assistantControls}>
+        <Pressable
+          style={[styles.switchChip, autoCommit && styles.switchChipActive]}
+          onPress={() => setAutoCommit((v) => !v)}
+        >
+          <Zap size={15} color={autoCommit ? colors.white : colors.muted} />
+          <Text style={[styles.switchChipText, autoCommit && styles.switchChipTextActive]}>
+            {autoCommit ? "AI 自动入账：开启" : "AI 自动入账：关闭"}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.switchChip, voiceReply && styles.switchChipActive]}
+          onPress={() => {
+            if (voiceReply && speaking) {
+              stopSpeaking();
+              setSpeaking(false);
+            }
+            setVoiceReply((v) => !v);
+          }}
+        >
+          {voiceReply ? <Volume2 size={15} color={colors.white} /> : <VolumeX size={15} color={colors.muted} />}
+          <Text style={[styles.switchChipText, voiceReply && styles.switchChipTextActive]}>
+            {voiceReply ? "AI 语音播报：开启" : "AI 语音播报：关闭"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* AI 语音回复气泡卡片 */}
+      {aiReply ? (
+        <Card style={styles.aiReplyCard}>
+          <View style={styles.aiReplyHeader}>
+            <View style={styles.aiAvatar}>
+              <Bot size={18} color={colors.white} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.aiReplyTitle}>AI 记账助理</Text>
+              <Text style={styles.aiReplyText}>{aiReply}</Text>
+            </View>
+            <Pressable
+              hitSlop={8}
+              onPress={toggleSpeech}
+              style={[styles.voicePlayButton, speaking && styles.voicePlayButtonActive]}
+            >
+              {speaking ? <VolumeX size={17} color={colors.white} /> : <Volume2 size={17} color={colors.primary} />}
+            </Pressable>
+          </View>
+        </Card>
+      ) : null}
+
+      {/* 撤销横幅 */}
+      {savedActions ? (
+        <View style={styles.undoBanner}>
+          <CheckCircle2 size={18} color={colors.primary} />
+          <Text style={[common.body, styles.flex]}>已自动记入 {savedActions.length} 笔账目</Text>
+          <Pressable accessibilityLabel="撤销入账" accessibilityRole="button" onPress={undoLastCommit} style={styles.undoButton}>
+            <Undo2 size={16} color={colors.primary} />
+            <Text style={styles.undoText}>撤销</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* 输入与语音控制 */}
       <Card>
-        <View style={styles.assistantTitle}><View style={styles.spark}><Sparkles size={20} color={colors.primary} /></View><View style={styles.flex}><Text style={common.h2}>自然语言记账</Text><Text style={common.muted}>一句话可以同时识别多笔收支、借贷和分类预算。</Text></View></View>
+        <View style={styles.assistantTitle}>
+          <View style={styles.spark}>
+            <Sparkles size={20} color={colors.primary} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={common.h2}>语音与自然语言记账</Text>
+            <Text style={common.muted}>一句话同时识别多笔消费、借贷、收入和总预算。</Text>
+          </View>
+        </View>
         <View style={styles.formGap}>
-          <Field label="说出来，或直接输入" multiline value={draft} onChangeText={(value) => { setSaved(false); setDraft(value); }} placeholder="例如：午饭38元，然后老王向我借了500元，这个月工资到账6000元" />
-          <PrimaryButton label={listening ? "停止识别" : "开始语音识别"} onPress={onListen} />
+          <Field
+            label="说出来，或直接输入"
+            multiline
+            value={draft}
+            onChangeText={(value) => {
+              setSavedActions(null);
+              setDraft(value);
+            }}
+            placeholder="例如：午饭吃肯德基38元用微信，借给老王500元，这个月兼职收入6000元"
+          />
+          <View style={styles.inlineButtons}>
+            <View style={styles.flex}>
+              <PrimaryButton
+                label={listening ? "停止聆听" : "开始语音记账"}
+                icon={Mic}
+                onPress={onListen}
+              />
+            </View>
+            {draft.trim() && !listening ? (
+              <View style={styles.flex}>
+                <SecondaryButton
+                  label="智能解析入账"
+                  icon={Zap}
+                  onPress={handleManualProcess}
+                />
+              </View>
+            ) : null}
+          </View>
           {speechMessage ? <Text style={styles.speechMessage}>{speechMessage}</Text> : null}
         </View>
       </Card>
-      {saved ? <View style={styles.success}><Text style={styles.successText}>已写入账本</Text></View> : null}
-      <SectionTitle>识别预览</SectionTitle>
+
+      {/* 识别预览卡片 */}
+      <SectionTitle right={<Text style={common.muted}>{actions.length} 条已解析</Text>}>识别明细预览</SectionTitle>
       <Card>
-        {actions.length ? actions.map((action, index) => <View key={`${actionLabel(action)}-${index}`} style={styles.previewRow}><View style={styles.previewIndex}><Text style={styles.previewIndexText}>{index + 1}</Text></View><Text style={[common.body, styles.flex]}>{actionLabel(action)}</Text></View>) : <EmptyState title="等待一句话" detail="识别结果会先在这里预览，确认后才写入本地账本。" />}
-        {actions.length ? <View style={{ marginTop: 14 }}><PrimaryButton label={`确认写入 ${actions.length} 条`} onPress={apply} /></View> : null}
+        {actions.length ? (
+          actions.map((action, index) => (
+            <View key={`${actionLabel(action)}-${index}`} style={styles.previewRow}>
+              <View style={styles.previewIndex}>
+                <Text style={styles.previewIndexText}>{index + 1}</Text>
+              </View>
+              <Text style={[common.body, styles.flex]}>{actionLabel(action)}</Text>
+            </View>
+          ))
+        ) : (
+          <EmptyState
+            title="等待语音或文字输入"
+            detail="说出日常收支后，AI 会自动解析并根据开关设置自动入账与语音回复。"
+          />
+        )}
+        {actions.length && !savedActions && !autoCommit ? (
+          <View style={{ marginTop: 14 }}>
+            <PrimaryButton label={`确认手动写入 ${actions.length} 条`} onPress={handleManualApply} />
+          </View>
+        ) : null}
       </Card>
-      <Text style={[common.muted, styles.privacyNote]}>语音由当前浏览器或系统听写能力处理；{syncCode ? "确认后的账目会同步到私有云账本。" : "确认后的账目仅保存在当前设备。"}</Text>
+
+      <Text style={[common.muted, styles.privacyNote]}>
+        语音由本机系统安全处理；{syncCode ? "确认后的账目会实时加密同步到云账本。" : "账目完全保存在当前设备本地。"}
+      </Text>
     </ScrollView>
   );
 }
@@ -344,7 +569,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   inline: { flexDirection: "row", alignItems: "center", gap: 7 },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  searchBox: { minHeight: 46, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, flexDirection: "row", alignItems: "center", paddingHorizontal: 13, marginBottom: 12, gap: 9 },
+  searchBox: { minHeight: 46, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, flexDirection: "row", alignItems: "center", paddingHorizontal: 13, marginBottom: 12, gap: 9 },
   searchInput: { flex: 1, fontSize: 14, color: colors.ink, minHeight: 44 },
   calendarHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   monthLabel: { minWidth: 62, textAlign: "center", fontSize: 13, fontWeight: "800", color: colors.ink },
@@ -367,7 +592,7 @@ const styles = StyleSheet.create({
   editButton: { width: 40, height: 44, borderRadius: 8, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
   deleteButton: { width: 40, height: 44, borderRadius: 8, backgroundColor: colors.expenseSoft, alignItems: "center", justifyContent: "center" },
   deletePressed: { backgroundColor: "#EDCFC9", transform: [{ scale: 0.96 }] },
-  undoBanner: { minHeight: 50, paddingHorizontal: 13, borderRadius: 8, backgroundColor: colors.amberSoft, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  undoBanner: { minHeight: 50, paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.primarySoft, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   undoButton: { minWidth: 76, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   undoText: { color: colors.primary, fontWeight: "800", fontSize: 13 },
   segment: { flexDirection: "row", gap: 8, marginBottom: 12 },
@@ -378,20 +603,31 @@ const styles = StyleSheet.create({
   chartBar: { height: "100%", backgroundColor: colors.primary, borderRadius: 5 },
   chartValue: { color: colors.ink, fontSize: 12, fontWeight: "800" },
   formGap: { gap: 14, marginTop: 16 },
+  inlineButtons: { flexDirection: "row", gap: 10 },
   editBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(25,34,30,0.38)" },
-  editSheet: { width: "100%", maxWidth: 560, maxHeight: "92%", alignSelf: "center", borderTopLeftRadius: 8, borderTopRightRadius: 8, backgroundColor: colors.surface },
+  editSheet: { width: "100%", maxWidth: 560, maxHeight: "92%", alignSelf: "center", borderTopLeftRadius: 18, borderTopRightRadius: 18, backgroundColor: colors.surface },
   editContent: { padding: 18, paddingBottom: 28 },
   editSegment: { marginTop: 16, marginBottom: 0 },
   editActions: { flexDirection: "row", gap: 10, marginTop: 4 },
   fieldLabel: { color: colors.ink, fontSize: 13, fontWeight: "700" },
   assistantTitle: { flexDirection: "row", gap: 12, alignItems: "center" },
-  spark: { width: 42, height: 42, borderRadius: 8, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
+  spark: { width: 42, height: 42, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
   previewRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   previewIndex: { width: 26, height: 26, borderRadius: 7, backgroundColor: colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   previewIndexText: { color: colors.primary, fontSize: 12, fontWeight: "800" },
-  success: { alignSelf: "center", backgroundColor: colors.primarySoft, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9, marginTop: 12 },
-  successText: { color: colors.primary, fontWeight: "800", fontSize: 13 },
   privacyNote: { textAlign: "center", marginTop: 14, paddingHorizontal: 18 },
   speechMessage: { color: colors.amber, fontSize: 12, lineHeight: 17, textAlign: "center" },
   noteSummary: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  assistantControls: { flexDirection: "row", gap: 8, marginBottom: 12, flexWrap: "wrap" },
+  switchChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.surfaceMuted },
+  switchChipActive: { backgroundColor: colors.primary },
+  switchChipText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  switchChipTextActive: { color: colors.white, fontWeight: "700" },
+  aiReplyCard: { marginBottom: 12, backgroundColor: colors.primarySoft, borderColor: colors.primary, borderWidth: 1 },
+  aiReplyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  aiAvatar: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  aiReplyTitle: { fontSize: 13, fontWeight: "800", color: colors.primary },
+  aiReplyText: { fontSize: 14, color: colors.ink, fontWeight: "600", marginTop: 3, lineHeight: 20 },
+  voicePlayButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", ...shadows },
+  voicePlayButtonActive: { backgroundColor: colors.primary },
 });
