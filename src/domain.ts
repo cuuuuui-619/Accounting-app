@@ -1,5 +1,5 @@
 import { createId } from "./sync.ts";
-import type { LedgerState, ParsedAction, Transaction, TransactionAccount, TransactionKind } from "./types";
+import type { Budget, LedgerState, LoanChanges, ParsedAction, ProjectChanges, Transaction, TransactionAccount, TransactionKind } from "./types";
 
 const CN_DIGITS: Record<string, number> = {
   "零": 0, "〇": 0, "○": 0, "一": 1, "二": 2, "两": 2, "俩": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
@@ -530,8 +530,12 @@ export function parseNaturalLanguage(text: string, date = localDateKey()): Parse
     }
 
     const budgetCategory = ["餐饮美食", "交通出行", "购物消费", "休闲娱乐", "居家缴费"].find((item) => entry.includes(item.slice(0, 2)));
-    if (/预算/.test(entry) && budgetCategory) {
-      actions.push({ type: "budget", value: { category: budgetCategory, amount } });
+    if (/预算/.test(entry)) {
+      if (budgetCategory) {
+        actions.push({ type: "budget", value: { category: budgetCategory, amount } });
+        continue;
+      }
+      actions.push({ type: "budget", value: { category: "总预算", amount } });
       continue;
     }
 
@@ -586,6 +590,44 @@ export function removeTransaction(state: LedgerState, id: string): LedgerState {
 export function restoreTransaction(state: LedgerState, transaction: Transaction): LedgerState {
   if (state.transactions.some((item) => item.id === transaction.id)) return state;
   return { ...state, transactions: [transaction, ...state.transactions] };
+}
+
+export function removeLoan(state: LedgerState, id: string): LedgerState {
+  return { ...state, loans: state.loans.filter((item) => item.id !== id) };
+}
+
+export function updateLoanState(state: LedgerState, id: string, changes: LoanChanges): LedgerState {
+  return {
+    ...state,
+    loans: state.loans.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+  };
+}
+
+export function removeProject(state: LedgerState, id: string): LedgerState {
+  return {
+    ...state,
+    projects: state.projects.filter((item) => item.id !== id),
+    transactions: state.transactions.map((item) => (item.projectId === id ? { ...item, projectId: undefined } : item)),
+  };
+}
+
+export function updateProjectState(state: LedgerState, id: string, changes: ProjectChanges): LedgerState {
+  return {
+    ...state,
+    projects: state.projects.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+  };
+}
+
+export function getOverallBudget(budgets: Budget[], period: "month" | "term" | "year" = "month"): number {
+  const multiplier = period === "month" ? 1 : period === "term" ? 6 : 12;
+  const totalBudget = budgets.find((item) => item.category === "总预算");
+  if (totalBudget && totalBudget.amount > 0) {
+    return totalBudget.amount * multiplier;
+  }
+  const categorySum = budgets
+    .filter((item) => item.category !== "总预算")
+    .reduce((sum, item) => sum + item.amount, 0);
+  return categorySum * multiplier;
 }
 
 export function totals(transactions: Transaction[]) {

@@ -30,6 +30,8 @@ export type Project = {
   target: number;
 };
 
+export type ProjectChanges = Partial<Pick<Project, "name" | "description" | "target">>;
+
 export type Loan = {
   id: string;
   person: string;
@@ -39,6 +41,8 @@ export type Loan = {
   date: string;
   settled: boolean;
 };
+
+export type LoanChanges = Partial<Pick<Loan, "person" | "direction" | "amount" | "repaid" | "date" | "settled">>;
 
 export type LedgerState = {
   transactions: Transaction[];

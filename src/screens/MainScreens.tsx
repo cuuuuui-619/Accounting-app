@@ -2,8 +2,8 @@ import React, { useMemo, useState } from "react";
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CalendarDays, ChevronLeft, ChevronRight, Save, Search, Sparkles, SquarePen, Trash2, Undo2 } from "lucide-react-native";
 
-import { Card, Chip, EmptyState, Field, MoneySummary, PrimaryButton, ProgressBar, SecondaryButton, SectionTitle, TransactionIcon } from "../components";
-import { categorySpend, formatMoney, isValidDate, monthTransactions, parseNaturalLanguage, periodTransactions, totals } from "../domain";
+import { Badge, Card, Chip, EmptyState, Field, MoneySummary, PrimaryButton, ProgressBar, SecondaryButton, SectionTitle, TransactionIcon } from "../components";
+import { categorySpend, formatMoney, getOverallBudget, isValidDate, monthTransactions, parseNaturalLanguage, periodTransactions, totals } from "../domain";
 import { useLedger } from "../store";
 import { colors, common } from "../theme";
 import type { ParsedAction, Transaction, TransactionAccount, TransactionKind } from "../types";
@@ -178,8 +178,7 @@ export function OverviewScreen() {
   const month = useMemo(() => formatMonth(new Date()), []);
   const current = useMemo(() => periodTransactions(state.transactions, period), [state.transactions, period]);
   const summary = useMemo(() => totals(current), [current]);
-  const budgetMultiplier = period === "month" ? 1 : period === "term" ? 6 : 12;
-  const budgetTotal = useMemo(() => state.budgets.reduce((sum, item) => sum + item.amount, 0) * budgetMultiplier, [state.budgets, budgetMultiplier]);
+  const budgetTotal = useMemo(() => getOverallBudget(state.budgets, period), [state.budgets, period]);
   const ratio = budgetTotal ? (summary.expense / budgetTotal) * 100 : 0;
   const categoryData = useMemo(() => {
     const spendByCategory = new Map<string, number>();
@@ -188,10 +187,20 @@ export function OverviewScreen() {
         spendByCategory.set(item.category, (spendByCategory.get(item.category) ?? 0) + item.amount);
       }
     }
-    return state.budgets.map((budget) => ({
-      ...budget,
-      spent: Math.round((spendByCategory.get(budget.category) ?? 0) * 100) / 100,
-    }));
+    const categoriesWithBudget = state.budgets.filter((b) => b.category !== "总预算" && b.amount > 0);
+    if (categoriesWithBudget.length > 0) {
+      return categoriesWithBudget.map((budget) => ({
+        ...budget,
+        spent: Math.round((spendByCategory.get(budget.category) ?? 0) * 100) / 100,
+      }));
+    }
+    return Array.from(spendByCategory.entries())
+      .map(([category, spent]) => ({
+        category,
+        amount: 0,
+        spent: Math.round(spent * 100) / 100,
+      }))
+      .sort((a, b) => b.spent - a.spent);
   }, [state.budgets, current]);
   const max = useMemo(() => Math.max(1, ...categoryData.map((item) => item.spent)), [categoryData]);
 
@@ -204,23 +213,32 @@ export function OverviewScreen() {
       </Card>
       <Card style={styles.blockGap}>
         <SectionTitle>{period === "month" ? "月度" : period === "term" ? "学期" : "年度"}总预算消耗进度</SectionTitle>
-        <Text style={styles.heroMoney}>{formatMoney(summary.expense)} <Text style={common.muted}>/ {formatMoney(budgetTotal)}</Text></Text>
-        <ProgressBar value={ratio} tone={ratio > 90 ? "expense" : ratio > 70 ? "amber" : "primary"} />
-        <View style={styles.between}><Text style={common.muted}>已使用 {Math.round(ratio)}%</Text><Text style={common.muted}>剩余 {formatMoney(Math.max(0, budgetTotal - summary.expense))}</Text></View>
+        <Text style={styles.heroMoney}>{formatMoney(summary.expense)} <Text style={common.muted}>/ {budgetTotal > 0 ? formatMoney(budgetTotal) : "未设置预算"}</Text></Text>
+        {budgetTotal > 0 ? (
+          <>
+            <ProgressBar value={ratio} tone={ratio > 90 ? "expense" : ratio > 70 ? "amber" : "primary"} />
+            <View style={styles.between}><Text style={common.muted}>已使用 {Math.round(ratio)}%</Text><Text style={common.muted}>剩余 {formatMoney(Math.max(0, budgetTotal - summary.expense))}</Text></View>
+          </>
+        ) : (
+          <Text style={[common.muted, { marginTop: 6 }]}>在【我的】→【预算管理】中设置月度总预算，实时掌握开销节奏。</Text>
+        )}
       </Card>
       <MoneySummary {...summary} />
       <Card style={styles.blockGap}>
         <Text style={common.h2}>{period === "month" ? "本月" : period === "term" ? "本学期" : "本年"}消费总结</Text>
-        <Text style={[common.body, { marginTop: 10 }]}>本期共有 {current.length} 笔记录，支出 {formatMoney(summary.expense)}，收入 {formatMoney(summary.income)}。{ratio < 70 ? "预算节奏稳定，可以继续保持。" : "预算使用较快，建议优先检查高支出分类。"}</Text>
+        <Text style={[common.body, { marginTop: 10 }]}>本期共有 {current.length} 笔记录，支出 {formatMoney(summary.expense)}，收入 {formatMoney(summary.income)}。{budgetTotal > 0 ? (ratio < 70 ? "预算节奏稳定，可以继续保持。" : "预算使用较快，建议优先检查高支出分类。") : "合理规划预算，助你更有条理地掌控财务。"}</Text>
       </Card>
       <SectionTitle>各分类支出</SectionTitle>
       <Card>
-        {categoryData.map((item) => (
+        {categoryData.length > 0 ? categoryData.map((item) => (
           <View key={item.category} style={styles.chartRow}>
-            <View style={styles.between}><Text style={common.body}>{item.category}</Text><Text style={styles.chartValue}>{formatMoney(item.spent)}</Text></View>
-            <View style={styles.chartTrack}><View style={[styles.chartBar, { width: `${item.spent / max * 100}%` }]} /></View>
+            <View style={styles.between}>
+              <Text style={common.body}>{item.category}</Text>
+              <Text style={styles.chartValue}>{formatMoney(item.spent)}{item.amount > 0 ? ` / ${formatMoney(item.amount)}` : ""}</Text>
+            </View>
+            <View style={styles.chartTrack}><View style={[styles.chartBar, { width: `${(item.spent / max) * 100}%` }]} /></View>
           </View>
-        ))}
+        )) : <EmptyState title="本期暂无分类支出" detail="记录第一笔消费后，各分类支出占比将在此直观呈现。" />}
       </Card>
     </ScrollView>
   );

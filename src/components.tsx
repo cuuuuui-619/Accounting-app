@@ -91,8 +91,8 @@ export function MoneySummary({ expense, income, balance }: { expense: number; in
   );
 }
 
-export function ProgressBar({ value, tone = "primary" }: { value: number; tone?: "primary" | "amber" | "expense" }) {
-  const barColor = tone === "amber" ? colors.amber : tone === "expense" ? colors.expense : colors.primary;
+export function ProgressBar({ value, tone = "primary" }: { value: number; tone?: "primary" | "amber" | "expense" | "income" }) {
+  const barColor = tone === "amber" ? colors.amber : tone === "expense" ? colors.expense : tone === "income" ? colors.income : colors.primary;
   return <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, value))}%`, backgroundColor: barColor }]} /></View>;
 }
 
@@ -148,43 +148,55 @@ export function TransactionIcon({ kind }: { kind: "expense" | "income" }) {
   return <View style={[styles.transactionIcon, { backgroundColor: kind === "income" ? colors.primarySoft : colors.expenseSoft }]}><ReceiptText size={18} color={kind === "income" ? colors.income : colors.expense} /></View>;
 }
 
+export function Badge({ label, tone = "primary" }: { label: string; tone?: "primary" | "expense" | "income" | "amber" | "muted" }) {
+  const bg = tone === "expense" ? colors.expenseSoft : tone === "income" ? colors.incomeSoft : tone === "amber" ? colors.amberSoft : tone === "muted" ? colors.surfaceMuted : colors.primarySoft;
+  const fg = tone === "expense" ? colors.expense : tone === "income" ? colors.income : tone === "amber" ? colors.amber : tone === "muted" ? colors.muted : colors.primary;
+  return (
+    <View style={[styles.badge, { backgroundColor: bg }]}>
+      <Text style={[styles.badgeText, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  header: { minHeight: 74, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, flexDirection: "row", alignItems: "center", gap: 11 },
+  header: { minHeight: 76, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 10, flexDirection: "row", alignItems: "center", gap: 12 },
   headerText: { flex: 1 },
-  brandMark: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
-  iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 8 },
-  cardPadding: { padding: 16 },
-  primaryButton: { minHeight: 44, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  primaryButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
-  secondaryButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  brandMark: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.primary, ...shadows },
+  iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 12 },
+  cardPadding: { padding: 18 },
+  primaryButton: { minHeight: 46, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, ...shadows },
+  primaryButtonText: { color: colors.white, fontSize: 15, fontWeight: "700", letterSpacing: 0.2 },
+  secondaryButton: { minHeight: 42, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   secondaryButtonText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
-  buttonPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
+  buttonPressed: { transform: [{ scale: 0.97 }], opacity: 0.88 },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.45 },
-  chip: { minHeight: 36, paddingHorizontal: 13, borderRadius: 8, backgroundColor: colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  chip: { minHeight: 36, paddingHorizontal: 15, borderRadius: 18, backgroundColor: colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: colors.primary },
-  chipText: { color: colors.muted, fontWeight: "600", fontSize: 12 },
-  chipTextActive: { color: colors.white },
-  fieldWrap: { gap: 7 },
-  fieldLabel: { color: colors.ink, fontSize: 13, fontWeight: "700" },
-  input: { minHeight: 48, borderRadius: 8, backgroundColor: colors.surfaceMuted, paddingHorizontal: 14, fontSize: 15, color: colors.ink, borderWidth: 1, borderColor: "transparent" },
-  multiline: { minHeight: 100, paddingTop: 13, textAlignVertical: "top" },
-  moneySummary: { flexDirection: "row", overflow: "hidden", marginTop: 12 },
-  moneyCell: { flex: 1, alignItems: "center", paddingVertical: 13, gap: 5 },
-  moneyDivider: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.line },
-  moneyValue: { fontSize: 14, lineHeight: 19, fontWeight: "800" },
-  progressTrack: { height: 7, backgroundColor: colors.surfaceMuted, borderRadius: 4, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: 4 },
-  empty: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: 9, paddingHorizontal: 28 },
+  chipText: { color: colors.muted, fontWeight: "600", fontSize: 13 },
+  chipTextActive: { color: colors.white, fontWeight: "700" },
+  fieldWrap: { gap: 8 },
+  fieldLabel: { color: colors.inkLight, fontSize: 13, fontWeight: "700" },
+  input: { minHeight: 48, borderRadius: 12, backgroundColor: colors.surfaceMuted, paddingHorizontal: 15, fontSize: 15, color: colors.ink, borderWidth: 1, borderColor: colors.line },
+  multiline: { minHeight: 100, paddingTop: 14, textAlignVertical: "top" },
+  moneySummary: { flexDirection: "row", overflow: "hidden", marginTop: 14, paddingVertical: 4 },
+  moneyCell: { flex: 1, alignItems: "center", paddingVertical: 14, gap: 6 },
+  moneyDivider: { borderLeftWidth: 1, borderLeftColor: colors.line },
+  moneyValue: { fontSize: 16, lineHeight: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  progressTrack: { height: 9, backgroundColor: colors.surfaceMuted, borderRadius: 5, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 5 },
+  empty: { minHeight: 200, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 28 },
   centerText: { textAlign: "center" },
-  navWrap: { position: "absolute", left: 12, right: 12, bottom: 10, height: 72, borderRadius: 8, backgroundColor: "rgba(252,252,248,0.98)", borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, flexDirection: "row", alignItems: "center", paddingHorizontal: 6, ...shadows },
-  navItem: { flex: 1, height: 54, borderRadius: 8, alignItems: "center", justifyContent: "center", gap: 3 },
+  navWrap: { position: "absolute", left: 14, right: 14, bottom: 12, height: 70, borderRadius: 24, backgroundColor: "rgba(255, 255, 255, 0.96)", borderWidth: 1, borderColor: colors.line, flexDirection: "row", alignItems: "center", paddingHorizontal: 8, ...shadows },
+  navItem: { flex: 1, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", gap: 3 },
   navActive: { backgroundColor: colors.primarySoft },
-  navLabel: { fontSize: 10, color: colors.muted, fontWeight: "600" },
+  navLabel: { fontSize: 11, color: colors.muted, fontWeight: "600" },
   navLabelActive: { color: colors.primary, fontWeight: "800" },
-  mic: { position: "absolute", right: 20, bottom: 94, width: 54, height: 54, borderRadius: 27, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...shadows },
+  mic: { position: "absolute", right: 20, bottom: 94, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...shadows },
   micListening: { backgroundColor: colors.expense },
-  stopSquare: { width: 15, height: 15, borderRadius: 3, backgroundColor: colors.white },
-  sectionTitle: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 22, marginBottom: 10 },
-  transactionIcon: { width: 38, height: 38, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  stopSquare: { width: 16, height: 16, borderRadius: 4, backgroundColor: colors.white },
+  sectionTitle: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 22, marginBottom: 12 },
+  transactionIcon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  badge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, alignSelf: "flex-start" },
+  badgeText: { fontSize: 11, fontWeight: "700" },
 });

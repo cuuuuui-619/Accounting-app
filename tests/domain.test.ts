@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyParsedActions, chineseNumberToValue, parseNaturalLanguage, periodTransactions, removeTransaction, restoreTransaction, totals } from "../src/domain.ts";
+import { applyParsedActions, chineseNumberToValue, getOverallBudget, parseNaturalLanguage, periodTransactions, removeLoan, removeProject, removeTransaction, restoreTransaction, totals, updateLoanState, updateProjectState } from "../src/domain.ts";
 import { initialState } from "../src/seed.ts";
 
 test("converts common Chinese money expressions", () => {
@@ -475,6 +475,83 @@ test("accurately recognizes 他人给钱/长辈给钱 (income) vs 给他人/孝�
     assert.equal(grandpaPacket.value.title, "红包");
     assert.equal(grandpaPacket.value.note, "爷爷");
   }
+});
+
+test("calculates overall budget correctly with total budget and categories", () => {
+  // Scenario 1: Only overall budget is set
+  const budgets1 = [{ category: "总预算", amount: 5000 }];
+  assert.equal(getOverallBudget(budgets1, "month"), 5000);
+  assert.equal(getOverallBudget(budgets1, "term"), 30000);
+  assert.equal(getOverallBudget(budgets1, "year"), 60000);
+
+  // Scenario 2: Only category budgets are set (no total budget)
+  const budgets2 = [
+    { category: "餐饮美食", amount: 1500 },
+    { category: "交通出行", amount: 500 },
+  ];
+  assert.equal(getOverallBudget(budgets2, "month"), 2000);
+  assert.equal(getOverallBudget(budgets2, "term"), 12000);
+  assert.equal(getOverallBudget(budgets2, "year"), 24000);
+
+  // Scenario 3: Both total budget and category budgets exist -> overall budget takes precedence
+  const budgets3 = [
+    { category: "总预算", amount: 4000 },
+    { category: "餐饮美食", amount: 1500 },
+    { category: "交通出行", amount: 500 },
+  ];
+  assert.equal(getOverallBudget(budgets3, "month"), 4000);
+  assert.equal(getOverallBudget(budgets3, "term"), 24000);
+  assert.equal(getOverallBudget(budgets3, "year"), 48000);
+
+  // Scenario 4: Natural language parses total budget
+  const [budgetAction] = parseNaturalLanguage("这个月总预算设置5000元", "2026-08-25");
+  assert.equal(budgetAction?.type, "budget");
+  if (budgetAction?.type === "budget") {
+    assert.equal(budgetAction.value.category, "总预算");
+    assert.equal(budgetAction.value.amount, 5000);
+  }
+});
+
+test("supports complete CRUD operations for loans and projects without data loss", () => {
+  // 1. Loan CRUD pure functions
+  const baseState = {
+    ...initialState,
+    loans: [
+      { id: "loan-1", person: "张三", direction: "lent" as const, amount: 1000, repaid: 200, date: "2026-08-01", settled: false },
+      { id: "loan-2", person: "李四", direction: "borrowed" as const, amount: 500, repaid: 0, date: "2026-08-05", settled: false },
+    ],
+    projects: [
+      { id: "proj-1", name: "周末集市", description: "手作摊位", target: 3000 },
+      { id: "proj-2", name: "自驾旅行", description: "川西大环线", target: 5000 },
+    ],
+    transactions: [
+      { id: "tx-1", title: "摆摊进货", amount: 800, kind: "expense" as const, category: "项目投入", date: "2026-08-10", projectId: "proj-1", createdAt: "2026-08-10T00:00:00.000Z" },
+      { id: "tx-2", title: "租车押金", amount: 1500, kind: "expense" as const, category: "项目投入", date: "2026-08-12", projectId: "proj-2", createdAt: "2026-08-12T00:00:00.000Z" },
+    ],
+  };
+
+  // Update loan
+  const updatedLoanState = updateLoanState(baseState, "loan-1", { repaid: 1000, settled: true, person: "张三丰" });
+  assert.equal(updatedLoanState.loans.find((l) => l.id === "loan-1")?.repaid, 1000);
+  assert.equal(updatedLoanState.loans.find((l) => l.id === "loan-1")?.settled, true);
+  assert.equal(updatedLoanState.loans.find((l) => l.id === "loan-1")?.person, "张三丰");
+
+  // Remove loan
+  const afterRemoveLoanState = removeLoan(updatedLoanState, "loan-2");
+  assert.equal(afterRemoveLoanState.loans.length, 1);
+  assert.equal(afterRemoveLoanState.loans[0]?.id, "loan-1");
+
+  // Update project
+  const updatedProjectState = updateProjectState(afterRemoveLoanState, "proj-1", { name: "超级周末集市", target: 4000 });
+  assert.equal(updatedProjectState.projects.find((p) => p.id === "proj-1")?.name, "超级周末集市");
+  assert.equal(updatedProjectState.projects.find((p) => p.id === "proj-1")?.target, 4000);
+
+  // Remove project -> safely unlinks projectId from transactions instead of deleting transactions
+  const afterRemoveProjectState = removeProject(updatedProjectState, "proj-1");
+  assert.equal(afterRemoveProjectState.projects.length, 1);
+  assert.equal(afterRemoveProjectState.projects[0]?.id, "proj-2");
+  assert.equal(afterRemoveProjectState.transactions.find((t) => t.id === "tx-1")?.projectId, undefined);
+  assert.equal(afterRemoveProjectState.transactions.find((t) => t.id === "tx-2")?.projectId, "proj-2");
 });
 
 

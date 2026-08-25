@@ -11,7 +11,15 @@ import {
   removeRemoteSubscription,
   subscribeToRemoteLedger,
 } from "./cloud";
-import { applyParsedActions, removeTransaction, restoreTransaction } from "./domain";
+import {
+  applyParsedActions,
+  removeLoan,
+  removeProject,
+  removeTransaction,
+  restoreTransaction,
+  updateLoanState,
+  updateProjectState,
+} from "./domain";
 import { initialState } from "./seed";
 import {
   createId,
@@ -25,7 +33,17 @@ import {
   stateToRecords,
   type PendingMutation,
 } from "./sync";
-import type { Budget, LedgerState, Loan, ParsedAction, Project, Transaction, TransactionChanges } from "./types";
+import type {
+  Budget,
+  LedgerState,
+  Loan,
+  LoanChanges,
+  ParsedAction,
+  Project,
+  ProjectChanges,
+  Transaction,
+  TransactionChanges,
+} from "./types";
 
 const STORAGE_KEY = "moss-ledger-state-v1";
 const CLOUD_CONFIG_KEY = "moss-ledger-cloud-v1";
@@ -51,10 +69,15 @@ type LedgerContextValue = {
   deleteTransaction: (id: string) => void;
   restoreDeletedTransaction: (transaction: Transaction) => void;
   addLoan: (value: Omit<Loan, "id">) => void;
+  updateLoan: (id: string, changes: LoanChanges) => void;
+  deleteLoan: (id: string) => void;
+  repayLoan: (id: string, amount: number) => void;
+  toggleLoan: (id: string) => void;
   addProject: (value: Omit<Project, "id">) => void;
+  updateProject: (id: string, changes: ProjectChanges) => void;
+  deleteProject: (id: string) => void;
   setBudgets: (budgets: Budget[]) => void;
   applyActions: (actions: ParsedAction[]) => void;
-  toggleLoan: (id: string) => void;
   resetDemo: () => void;
 };
 
@@ -322,18 +345,43 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const deleteTransaction = useCallback((id: string) => updateLocalState((current) => removeTransaction(current, id)), [updateLocalState]);
   const restoreDeletedTransaction = useCallback((transaction: Transaction) => updateLocalState((current) => restoreTransaction(current, transaction)), [updateLocalState]);
   const addLoan = useCallback((value: Omit<Loan, "id">) => updateLocalState((current) => ({ ...current, loans: [{ ...value, id: createId("loan") }, ...current.loans] })), [updateLocalState]);
+  const updateLoan = useCallback((id: string, changes: LoanChanges) => updateLocalState((current) => updateLoanState(current, id, changes)), [updateLocalState]);
+  const deleteLoan = useCallback((id: string) => updateLocalState((current) => removeLoan(current, id)), [updateLocalState]);
+  const repayLoan = useCallback((id: string, amount: number) => {
+    updateLocalState((current) => ({
+      ...current,
+      loans: current.loans.map((loan) => {
+        if (loan.id !== id) return loan;
+        const repaid = Math.min(loan.amount, Math.max(0, (loan.repaid || 0) + amount));
+        return { ...loan, repaid, settled: repaid >= loan.amount };
+      }),
+    }));
+  }, [updateLocalState]);
+  const toggleLoan = useCallback((id: string) => updateLocalState((current) => ({ ...current, loans: current.loans.map((loan) => loan.id === id ? { ...loan, settled: !loan.settled, repaid: loan.settled ? 0 : loan.amount } : loan) })), [updateLocalState]);
+
   const addProject = useCallback((value: Omit<Project, "id">) => updateLocalState((current) => ({ ...current, projects: [...current.projects, { ...value, id: createId("project") }] })), [updateLocalState]);
+  const updateProject = useCallback((id: string, changes: ProjectChanges) => updateLocalState((current) => updateProjectState(current, id, changes)), [updateLocalState]);
+  const deleteProject = useCallback((id: string) => updateLocalState((current) => removeProject(current, id)), [updateLocalState]);
+
   const setBudgets = useCallback((budgets: Budget[]) => updateLocalState((current) => ({ ...current, budgets })), [updateLocalState]);
   const applyActions = useCallback((actions: ParsedAction[]) => updateLocalState((current) => applyParsedActions(current, actions)), [updateLocalState]);
-  const toggleLoan = useCallback((id: string) => updateLocalState((current) => ({ ...current, loans: current.loans.map((loan) => loan.id === id ? { ...loan, settled: !loan.settled, repaid: loan.settled ? 0 : loan.amount } : loan) })), [updateLocalState]);
   const resetDemo = useCallback(() => updateLocalState(() => initialState), [updateLocalState]);
 
   const value = useMemo(() => ({
     state, ready, syncStatus, syncCode, syncError, pendingCount, lastSyncAt,
     createSyncLedger, joinSyncLedger, syncNow,
-    addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, addLoan, addProject,
-    setBudgets, applyActions, toggleLoan, resetDemo,
-  }), [state, ready, syncStatus, syncCode, syncError, pendingCount, lastSyncAt, createSyncLedger, joinSyncLedger, syncNow, addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, addLoan, addProject, setBudgets, applyActions, toggleLoan, resetDemo]);
+    addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction,
+    addLoan, updateLoan, deleteLoan, repayLoan, toggleLoan,
+    addProject, updateProject, deleteProject,
+    setBudgets, applyActions, resetDemo,
+  }), [
+    state, ready, syncStatus, syncCode, syncError, pendingCount, lastSyncAt,
+    createSyncLedger, joinSyncLedger, syncNow,
+    addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction,
+    addLoan, updateLoan, deleteLoan, repayLoan, toggleLoan,
+    addProject, updateProject, deleteProject,
+    setBudgets, applyActions, resetDemo,
+  ]);
   return <LedgerContext.Provider value={value}>{children}</LedgerContext.Provider>;
 }
 
