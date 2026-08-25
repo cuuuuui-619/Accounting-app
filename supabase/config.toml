@@ -1,0 +1,4 @@
+project_id = "iibhhdpsbjdnqnoljfka"
+
+[functions.moss-admin]
+verify_jwt = false

@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "苔账",
+    "slug": "moss-ledger",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.local.mossledger",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "允许苔账使用麦克风来语音记账。",
+        "NSSpeechRecognitionUsageDescription": "允许苔账识别语音中的记账内容。"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "苔账",
+      "shortName": "苔账",
+      "lang": "zh-CN",
+      "scope": "./",
+      "themeColor": "#245746",
+      "backgroundColor": "#F4F4EF",
+      "description": "本地优先的个人记账工具",
+      "display": "standalone",
+      "startUrl": "./",
+      "orientation": "portrait",
+      "barStyle": "default",
+      "preferRelatedApplications": false,
+      "favicon": "./public/icons/icon-192.png"
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "允许苔账使用麦克风来语音记账。",
+          "speechRecognitionPermission": "允许苔账识别语音中的记账内容。"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6f461d45-71be-4431-af4c-19e72155edbe"
+      }
+    },
+    "owner": "cuiovo"
+  }
+}

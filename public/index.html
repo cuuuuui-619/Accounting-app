@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="application-name" content="苔账" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="苔账" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="preconnect" href="https://iibhhdpsbjdnqnoljfka.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="//iibhhdpsbjdnqnoljfka.supabase.co" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <title>%WEB_TITLE%</title>
+    <style id="expo-reset">
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #F4F4EF;
+        padding-top: env(safe-area-inset-top);
+        padding-right: env(safe-area-inset-right);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+      }
+      #root { display: flex; height: 100%; flex: 1; }
+    </style>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/sw.js").then(function (reg) {
+            reg.update();
+          }).catch(function () {
+            // The online app remains usable when service workers are unavailable.
+          });
+        });
+        navigator.serviceWorker.addEventListener("controllerchange", function () {
+          window.location.reload();
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <noscript>苔账需要启用 JavaScript。</noscript>
+    <div id="root"></div>
+  </body>
+</html>

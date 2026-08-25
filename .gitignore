@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+.expo-user/
+.expo-home/
+.npm-cache/
+.finesse/
+dist/
+web-build/
+video-analysis/
+preview.*.log
+preview.pid
+*.log
+.DS_Store
