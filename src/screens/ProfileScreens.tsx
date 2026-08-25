@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, ChevronRight, CircleHelp, Cloud, CloudOff, Copy, Eye, EyeOff, FolderKanban, HandCoins, KeyRound, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Trash2, Undo2, WalletCards } from "lucide-react-native";
 
@@ -211,6 +211,11 @@ export function BudgetsScreen() {
   const { state, setBudgets } = useLedger();
   const [draft, setDraft] = useState<Budget[]>(state.budgets);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setDraft(state.budgets);
+  }, [state.budgets]);
+
   const total = draft.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const update = (category: string, value: string) => setDraft((items) => items.map((item) => item.category === category ? { ...item, amount: Number(value) || 0 } : item));
   return (
