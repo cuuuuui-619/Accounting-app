@@ -107,7 +107,24 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     const config = configRef.current;
     if (!config || queueRef.current.length > 0) return;
     const records = await fetchRemoteRecords(config.ledgerId);
-    replaceState(recordsToState(records));
+    if (queueRef.current.length > 0) return;
+    const remoteState = recordsToState(records);
+    
+    const remoteTxIds = new Set(remoteState.transactions.map((t) => t.id));
+    const localNewTxs = stateRef.current.transactions.filter((t) => !remoteTxIds.has(t.id));
+    const remoteLoanIds = new Set(remoteState.loans.map((l) => l.id));
+    const localNewLoans = stateRef.current.loans.filter((l) => !remoteLoanIds.has(l.id));
+    const remoteProjectIds = new Set(remoteState.projects.map((p) => p.id));
+    const localNewProjects = stateRef.current.projects.filter((p) => !remoteProjectIds.has(p.id));
+
+    const mergedState: LedgerState = {
+      transactions: [...localNewTxs, ...remoteState.transactions],
+      budgets: remoteState.budgets.length > 0 ? remoteState.budgets : stateRef.current.budgets,
+      projects: [...localNewProjects, ...remoteState.projects],
+      loans: [...localNewLoans, ...remoteState.loans],
+    };
+
+    replaceState(mergedState);
     const syncedAt = new Date().toISOString();
     setLastSyncAt(syncedAt);
     setSyncStatus("synced");
@@ -139,14 +156,17 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       try {
         setSyncStatus(queueRef.current.length ? "syncing" : "connecting");
         await ensureAnonymousSession();
-        while (queueRef.current.length) {
-          const mutation = queueRef.current[0];
-          if (!mutation) break;
-          await pushRemoteMutation(config.ledgerId, mutation);
-          if (queueRef.current[0] === mutation) queueRef.current.shift();
-          await persistQueue();
+        while (true) {
+          while (queueRef.current.length) {
+            const mutation = queueRef.current[0];
+            if (!mutation) break;
+            await pushRemoteMutation(config.ledgerId, mutation);
+            if (queueRef.current[0] === mutation) queueRef.current.shift();
+            await persistQueue();
+          }
+          await refreshFromCloud();
+          if (queueRef.current.length === 0) break;
         }
-        await refreshFromCloud();
       } catch (error) {
         setSyncStatus(isOnline() ? "error" : "offline");
         setSyncError(errorMessage(error));
