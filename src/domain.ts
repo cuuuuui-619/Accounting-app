@@ -1,3 +1,4 @@
+import { createId } from "./sync.ts";
 import type { LedgerState, ParsedAction, Transaction, TransactionAccount, TransactionKind } from "./types";
 
 const CN_DIGITS: Record<string, number> = {
@@ -601,9 +602,9 @@ export function applyParsedActions(state: LedgerState, actions: ParsedAction[]):
   let next = { ...state, transactions: [...state.transactions], loans: [...state.loans], budgets: [...state.budgets] };
   for (const action of actions) {
     if (action.type === "transaction") {
-      next.transactions.unshift({ ...action.value, id: `tx-${Date.now()}-${next.transactions.length}`, createdAt: new Date().toISOString() });
+      next.transactions.unshift({ ...action.value, id: createId("tx"), createdAt: new Date().toISOString() });
     } else if (action.type === "loan") {
-      next.loans.unshift({ ...action.value, id: `loan-${Date.now()}-${next.loans.length}` });
+      next.loans.unshift({ ...action.value, id: createId("loan") });
     } else {
       const found = next.budgets.findIndex((budget) => budget.category === action.value.category);
       if (found >= 0) next.budgets[found] = action.value;

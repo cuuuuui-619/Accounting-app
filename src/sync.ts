@@ -42,6 +42,21 @@ export function generateSyncCode(bytes?: Uint8Array): string {
   return normalizeSyncCode(code);
 }
 
+export function createId(prefix: "tx" | "budget" | "project" | "loan"): string {
+  let uuid: string;
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    uuid = globalThis.crypto.randomUUID();
+  } else if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.getRandomValues === "function") {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    uuid = [...bytes].map((b, i) => ([4, 6, 8, 10].includes(i) ? `-${b.toString(16).padStart(2, "0")}` : b.toString(16).padStart(2, "0"))).join("");
+  } else {
+    uuid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+  }
+  return `${prefix}-${uuid}`;
+}
+
 export async function hashSyncCode(value: string): Promise<string> {
   const normalized = normalizeSyncCode(value).replaceAll("-", "");
   if (!isValidSyncCode(normalized)) throw new Error("invalid_sync_code");

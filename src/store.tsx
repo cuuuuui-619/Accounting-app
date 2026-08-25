@@ -14,6 +14,7 @@ import {
 import { applyParsedActions, removeTransaction, restoreTransaction } from "./domain";
 import { initialState } from "./seed";
 import {
+  createId,
   diffLedgerStates,
   generateSyncCode,
   hashSyncCode,
@@ -288,15 +289,15 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   }, [createSyncLedger, flushQueue, refreshFromCloud]);
 
   const addTransaction = useCallback((value: Omit<Transaction, "id" | "createdAt">) => {
-    updateLocalState((current) => ({ ...current, transactions: [{ ...value, id: `tx-${Date.now()}`, createdAt: new Date().toISOString() }, ...current.transactions] }));
+    updateLocalState((current) => ({ ...current, transactions: [{ ...value, id: createId("tx"), createdAt: new Date().toISOString() }, ...current.transactions] }));
   }, [updateLocalState]);
   const updateTransaction = useCallback((id: string, changes: TransactionChanges) => {
     updateLocalState((current) => ({ ...current, transactions: current.transactions.map((item) => item.id === id ? { ...item, ...changes } : item) }));
   }, [updateLocalState]);
   const deleteTransaction = useCallback((id: string) => updateLocalState((current) => removeTransaction(current, id)), [updateLocalState]);
   const restoreDeletedTransaction = useCallback((transaction: Transaction) => updateLocalState((current) => restoreTransaction(current, transaction)), [updateLocalState]);
-  const addLoan = useCallback((value: Omit<Loan, "id">) => updateLocalState((current) => ({ ...current, loans: [{ ...value, id: `loan-${Date.now()}` }, ...current.loans] })), [updateLocalState]);
-  const addProject = useCallback((value: Omit<Project, "id">) => updateLocalState((current) => ({ ...current, projects: [...current.projects, { ...value, id: `project-${Date.now()}` }] })), [updateLocalState]);
+  const addLoan = useCallback((value: Omit<Loan, "id">) => updateLocalState((current) => ({ ...current, loans: [{ ...value, id: createId("loan") }, ...current.loans] })), [updateLocalState]);
+  const addProject = useCallback((value: Omit<Project, "id">) => updateLocalState((current) => ({ ...current, projects: [...current.projects, { ...value, id: createId("project") }] })), [updateLocalState]);
   const setBudgets = useCallback((budgets: Budget[]) => updateLocalState((current) => ({ ...current, budgets })), [updateLocalState]);
   const applyActions = useCallback((actions: ParsedAction[]) => updateLocalState((current) => applyParsedActions(current, actions)), [updateLocalState]);
   const toggleLoan = useCallback((id: string) => updateLocalState((current) => ({ ...current, loans: current.loans.map((loan) => loan.id === id ? { ...loan, settled: !loan.settled, repaid: loan.settled ? 0 : loan.amount } : loan) })), [updateLocalState]);
