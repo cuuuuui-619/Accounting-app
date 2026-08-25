@@ -21,7 +21,7 @@ create table if not exists public.ledger_records (
   payload jsonb,
   deleted_at timestamptz,
   updated_at timestamptz not null,
-  updated_by uuid not null references auth.users(id) on delete cascade,
+  updated_by uuid references auth.users(id) on delete set null,
   primary key (ledger_id, record_type, record_id),
   check ((deleted_at is null and jsonb_typeof(payload) = 'object') or (deleted_at is not null and payload is null))
 );
