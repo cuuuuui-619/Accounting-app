@@ -11,6 +11,13 @@ test("converts common Chinese money expressions", () => {
   assert.equal(chineseNumberToValue("一千五"), 1500);
 });
 
+test("parses zero-five fractional expressions and dot decimal points correctly", () => {
+  assert.equal(chineseNumberToValue("三块零五"), 3.05);
+  assert.equal(chineseNumberToValue("一百块零五"), 100.05);
+  assert.equal(chineseNumberToValue("三点五元"), 3.5);
+  assert.equal(chineseNumberToValue("十点零八元"), 10.08);
+});
+
 test("parses multiple voice bookkeeping actions", () => {
   const actions = parseNaturalLanguage("午饭38元，然后老王向我借了五百，这个月工资到账六千元", "2026-08-23");
   assert.equal(actions.length, 3);

@@ -62,6 +62,30 @@ export function chineseNumberToValue(input: string): number {
     return Math.round(Number(arabicWanMatch[1]) * factor * 100) / 100;
   }
 
+  if (clean.includes("点")) {
+    const [intPart = "", decPart = ""] = clean.split("点");
+    const intVal = parseChinesePositionalNumber(intPart.replace(/块$/, ""));
+    const cleanDec = decPart.replace(/块$/, "");
+    let decVal = 0;
+    if (/^\d+$/.test(cleanDec)) {
+      decVal = Number(`0.${cleanDec}`);
+    } else {
+      let decStr = "";
+      for (const char of cleanDec) {
+        if (char in CN_DIGITS) {
+          decStr += String(CN_DIGITS[char]);
+        }
+      }
+      if (decStr) {
+        decVal = Number(`0.${decStr}`);
+      } else {
+        const parsed = parseChinesePositionalNumber(cleanDec);
+        decVal = Number(`0.${parsed}`);
+      }
+    }
+    return Math.round((intVal + decVal) * 100) / 100;
+  }
+
   if (/块半$/.test(clean)) {
     const mainStr = clean.slice(0, -2);
     const mainVal = parseChinesePositionalNumber(mainStr);
@@ -75,7 +99,8 @@ export function chineseNumberToValue(input: string): number {
 
     let dime = 0;
     let cent = 0;
-    const cleanSub = subPart.replace(/^零/, "");
+    const isLeadingZero = subPart.startsWith("零") || subPart.startsWith("〇") || subPart.startsWith("○");
+    const cleanSub = subPart.replace(/^[零〇○]/, "");
     if (cleanSub.includes("毛")) {
       const [dimePart = "", centPart = ""] = cleanSub.split("毛");
       dime = parseChinesePositionalNumber(dimePart);
@@ -85,7 +110,10 @@ export function chineseNumberToValue(input: string): number {
     } else if (cleanSub.includes("分")) {
       cent = parseChinesePositionalNumber(cleanSub.replace(/分$/, ""));
     } else {
-      if (/^\d+$/.test(cleanSub)) {
+      if (isLeadingZero) {
+        const subVal = /^\d+$/.test(cleanSub) ? Number(cleanSub) : parseChinesePositionalNumber(cleanSub);
+        cent = subVal;
+      } else if (/^\d+$/.test(cleanSub)) {
         if (cleanSub.length === 1) dime = Number(cleanSub);
         else if (cleanSub.length === 2) {
           dime = Number(cleanSub[0]);
@@ -121,7 +149,7 @@ export function chineseNumberToValue(input: string): number {
   return Math.round(parseChinesePositionalNumber(clean) * 100) / 100;
 }
 
-const amountPattern = /(?:[+\-＋－增减加])?\s*(?:人民币|[¥￥])?\s*(?:(?:\d+(?:\.\d+)?|[零一二两俩三四五六七八九十百千万]+)\s*(?:万|千|块钱|块|元)(?:\s*(?:半|(?:零\s*)?(?:\d+|[零一二两俩三四五六七八九]+)\s*(?:毛|角)?(?:\s*(?:\d+|[零一二两俩三四五六七八九]+)\s*分)?))|(?:\d+|[零一二两俩三四五六七八九]+)\s*(?:毛|角)(?:\s*(?:\d+|[零一二两俩三四五六七八九]+)\s*分)?|(?:\d+|[零一二两俩三四五六七八九]+)\s*分|(?:\d+(?:\.\d+)?|[零一二两俩三四五六七八九十百千万]+)\s*(?:元|块钱|块)?)/g;
+const amountPattern = /(?:[+\-＋－增减加])?\s*(?:人民币|[¥￥])?\s*(?:(?:\d+(?:\.\d+)?|[零一二两俩三四五六七八九十百千万]+(?:[点.]\s*[零一二两俩三四五六七八九\d]+)?)\s*(?:万|千|块钱|块|元)(?:\s*(?:半|(?:零\s*)?(?:\d+|[零一二两俩三四五六七八九]+)\s*(?:毛|角)?(?:\s*(?:\d+|[零一二两俩三四五六七八九]+)\s*分)?))|(?:\d+|[零一二两俩三四五六七八九]+)\s*(?:毛|角)(?:\s*(?:\d+|[零一二两俩三四五六七八九]+)\s*分)?|(?:\d+|[零一二两俩三四五六七八九]+)\s*分|(?:\d+(?:\.\d+)?|[零一二两俩三四五六七八九十百千万]+(?:[点.]\s*[零一二两俩三四五六七八九\d]+)?)\s*(?:元|块钱|块)?)/g;
 
 export function extractAmounts(text: string): number[] {
   return [...text.matchAll(amountPattern)]
